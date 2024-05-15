@@ -46,8 +46,8 @@ describe('+ AppController', () => {
           Promise.all([
             usersCollection.insertMany([{ email: 'john@mail.com' }]),
             filesCollection.insertMany([
-              { name: 'foo.txt', type: 'file'},
-              {name: 'pic.png', type: 'image' },
+              { name: 'foo.txt', type: 'file' },
+              { name: 'pic.png', type: 'image' },
             ])
           ])
             .then(() => {
