@@ -1,53 +1,40 @@
+/* eslint-disable import/no-named-as-default */
 import sha1 from 'sha1';
-import { ObjectId } from 'mongodb';
+import Queue from 'bull/lib/queue';
 import dbClient from '../utils/db';
-import redisClient from '../utils/redis';
 
-class UsersController {
+const userQueue = new Queue('email sending');
+
+export default class UsersController {
   static async postNew(req, res) {
-    const { email, password } = req.body;
+    const email = req.body ? req.body.email : null;
+    const password = req.body ? req.body.password : null;
 
     if (!email) {
-      res.status(400).send({ error: 'Missing email' });
+      res.status(400).json({ error: 'Missing email' });
       return;
     }
-
     if (!password) {
-      res.status(400).send({ error: 'Missing password' });
+      res.status(400).json({ error: 'Missing password' });
       return;
     }
+    const user = await (await dbClient.usersCollection()).findOne({ email });
 
-    const user = await dbClient.users.findOne({ email });
     if (user) {
-      res.status(400).send({ error: 'Already exist' });
+      res.status(400).json({ error: 'Already exist' });
       return;
     }
+    const insertionInfo = await (await dbClient.usersCollection())
+      .insertOne({ email, password: sha1(password) });
+    const userId = insertionInfo.insertedId.toString();
 
-    const newUser = {
-      email,
-      password: sha1(password),
-    };
-
-    const result = await dbClient.users.insertOne(newUser);
-    res.status(201).send({ id: result.insertedId, email });
+    userQueue.add({ userId });
+    res.status(201).json({ email, id: userId });
   }
 
   static async getMe(req, res) {
-    const token = req.headers['x-token'];
-    const userId = await redisClient.get(`auth_${token}`);
-    if (!userId) {
-      res.status(401).send({ error: 'Unauthorized' });
-      return;
-    }
+    const { user } = req;
 
-    const user = await dbClient.users.findOne({ _id: ObjectId(userId) });
-    if (!user) {
-      res.status(401).send({ error: 'Unauthorized' });
-      return;
-    }
-
-    res.status(200).send({ id: user._id.toString(), email: user.email });
+    res.status(200).json({ email: user.email, id: user._id.toString() });
   }
 }
-
-export default UsersController;
